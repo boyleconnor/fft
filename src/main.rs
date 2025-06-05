@@ -9,18 +9,39 @@ const IMAGE_WIDTH: u32 = 2048;
 const IMAGE_HEIGHT: u32 = 1024;
 const Y_SCALING_FACTOR: i16 = i16::MAX / (IMAGE_HEIGHT as i16);
 const SAMPLE_ON_COLOR: image::Rgb<u8> = image::Rgb([u8::MAX, u8::MAX, u8::MAX]);
+const MAX_VISUAL_AMPLITUDE: u32 = 100; // In pixels
 
 fn main() {
     let mut reader = hound::WavReader::open("data/test_mono.wav").unwrap();
 
-    let (sin_magnitudes, cos_magnitudes) = dumb_fourier_transform(&reader.samples().map(|sample| sample.unwrap()).collect::<Vec<i16>>(), 5_000);
-    println!("sin_magnitudes: {:?}", sin_magnitudes);
-    
-    let mut image = image::RgbImage::new(sin_magnitudes.len() as u32, IMAGE_HEIGHT);
-    for (idx, (sin_magnitude, cos_magnitude)) in sin_magnitudes.iter().zip(cos_magnitudes).enumerate() {
-        for i in 0..(IMAGE_HEIGHT / 5) {
-            image.put_pixel(idx as u32, IMAGE_HEIGHT / 4 + i, image::Rgb::from([(u8::MAX as f32 * sin_magnitude) as u8; 3]));
-            image.put_pixel(idx as u32, (IMAGE_HEIGHT * 3) / 4 + i, image::Rgb::from([(u8::MAX as f32 * cos_magnitude) as u8; 3]));
+    let samples: Vec<f64> = reader.samples::<i16>().map(|sample| sample.unwrap() as f64 / i16::MAX as f64).collect();
+    println!("number of samples: {}", samples.len());
+    let magnitudes = dumb_fourier_transform(&samples, 5_000);
+
+    draw_magnitudes(magnitudes);
+}
+
+fn draw_magnitudes(magnitudes: Vec<(f64, f64)>) {
+    let mut image = image::RgbImage::new(magnitudes.len() as u32, IMAGE_HEIGHT);
+    let max_amplitude = magnitudes
+        .iter()
+        .map(|(real, imaginary)| (real.abs(), imaginary.abs()))
+        .map(
+            |(real, imaginary)| {
+                std::cmp::max_by(real, imaginary, |a: &f64, b: &f64| a.total_cmp(b))
+            }
+        )
+        .max_by(|a, b| a.total_cmp(b)).unwrap();
+    for (period, (real, imaginary)) in magnitudes.iter().enumerate() {
+        for (amplitude, center_y) in [
+            (real, IMAGE_HEIGHT / 4),
+            (imaginary, (IMAGE_HEIGHT * 3) / 4)
+        ] {
+            let discrete_amplitude = (amplitude / max_amplitude * MAX_VISUAL_AMPLITUDE as f64) as i32;
+            let (lower, higher) = if (discrete_amplitude >= 0) { (0, discrete_amplitude) } else { (discrete_amplitude, 0) };
+            for offset in lower..higher {
+                image.put_pixel(period as u32, (center_y as i32 + offset) as u32, image::Rgb([u8::MAX; 3]))
+            }
         }
     }
     image.save("outputs/fourier_transform.png").unwrap();
@@ -43,20 +64,17 @@ fn save_waveform(reader: &mut WavReader<BufReader<File>>) {
     image.save_with_format("outputs/image.png", image::ImageFormat::Png).unwrap()
 }
 
-fn dumb_fourier_transform(samples: &[i16], max_window_size: usize) -> (Vec<f32>, Vec<f32>) {
-    let mut sin_magnitudes = vec![0.0; max_window_size + 1];
-    let mut cos_magnitudes = vec![0.0; max_window_size + 1];
-    for window_size in 2..=max_window_size {
-        let mut sin_magnitude = 0.0;
-        let mut cos_magnitude = 0.0;
+fn dumb_fourier_transform(samples: &[f64], max_period: usize) -> Vec<(f64, f64)> {
+    let mut magnitudes = vec![(0.0, 0.0); max_period + 1];
+    for period in 1..=max_period {
+        let (mut imaginary, mut real) = (0.0f64, 0.0f64);
         for i in 0..samples.len() {
-            let (sin, cos) = f32::sin_cos(i as f32 * 2.0f32 * std::f32::consts::PI / window_size as f32);
-            sin_magnitude += samples[i] as f32 * sin;
-            cos_magnitude += samples[i] as f32 * cos;
+            let (sin, cos) = f64::sin_cos(i as f64 * 2.0f64 * std::f64::consts::PI / period as f64);
+            imaginary += samples[i] * sin;
+            real += samples[i] * cos;
         }
-        sin_magnitudes[window_size] = sin_magnitude / (samples.len() as f32);
-        cos_magnitudes[window_size] = cos_magnitude / (samples.len() as f32);
+        magnitudes[period] = (real, imaginary);
     }
 
-    (sin_magnitudes, cos_magnitudes)
+    magnitudes
 }
