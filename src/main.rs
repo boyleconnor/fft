@@ -35,13 +35,15 @@ fn inverse_fourier_transform(magnitudes: &[(f64, f64)], sample_length: usize) ->
     for (period, (real, imaginary)) in magnitudes.iter().enumerate() {
 
         if period % 1_000 == 0 {
-            println!("FT: finished calculating periods up to: {}, (time = {:?})", period, std::time::SystemTime::now());
+            println!("IFT: finished calculating periods up to: {}, (time = {:?})", period, std::time::SystemTime::now());
         }
 
         for sample_idx in 0..reconstructed_samples.len() {
             if period != 0 {
                 let (sin, cos) = f64::sin_cos(sample_idx as f64 * 2.0 * std::f64::consts::PI / period as f64);
                 reconstructed_samples[sample_idx] += (real * cos) + (imaginary * sin);
+            } else {
+                reconstructed_samples[sample_idx] += real;
             }
         }
     }
@@ -93,7 +95,7 @@ fn save_waveform(reader: &mut WavReader<BufReader<File>>) {
 
 fn dumb_fourier_transform(samples: &[f64], max_period: usize) -> Vec<(f64, f64)> {
     let mut magnitudes = vec![(0.0, 0.0); max_period + 1];
-    for period in 1..=max_period {
+    for period in 0..=max_period {
 
         if period % 1_000 == 0 {
             println!("FT: finished calculating periods up to: {}, (time = {:?})", period, std::time::SystemTime::now());
@@ -101,7 +103,11 @@ fn dumb_fourier_transform(samples: &[f64], max_period: usize) -> Vec<(f64, f64)>
 
         let (mut imaginary, mut real) = (0.0f64, 0.0f64);
         for i in 0..samples.len() {
-            let (sin, cos) = f64::sin_cos(i as f64 * 2.0f64 * std::f64::consts::PI / period as f64);
+            let (sin, cos) = if period != 0 {
+                f64::sin_cos(i as f64 * 2.0f64 * std::f64::consts::PI / period as f64)
+            } else {
+                (0.0f64, 1.0f64)
+            };
             imaginary += samples[i] * sin;
             real += samples[i] * cos;
         }
