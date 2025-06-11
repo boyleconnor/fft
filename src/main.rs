@@ -38,7 +38,7 @@ fn inverse_fourier_transform(buckets: &[(f64, f64)]) -> Vec<f64> {
         }
 
         if k % 1_000 == 0 {
-            println!("IFT: finished calculating buckets up to: {} / samples.len(), (time = {:?})", k, std::time::SystemTime::now());
+            println!("IFT: finished calculating buckets up to: {} / {}, (time = {:?})", k, buckets.len(), std::time::SystemTime::now());
         }
         
         let frequency = k as f64 / buckets.len() as f64;
@@ -107,6 +107,7 @@ fn dumb_fourier_transform(samples: &[f64], min_k: usize) -> Vec<(f64, f64)> {
         let (mut imaginary, mut real) = (0.0f64, 0.0f64);
         for n in 0..samples.len() {
             let (sin, cos) = f64::sin_cos(n as f64 * 2.0f64 * std::f64::consts::PI * frequency);
+            // Assume imaginary component is 0:
             imaginary += samples[n] * sin;
             real += samples[n] * cos;
         }
@@ -114,4 +115,62 @@ fn dumb_fourier_transform(samples: &[f64], min_k: usize) -> Vec<(f64, f64)> {
     }
 
     buckets
+}
+
+fn fast_fourier_transform(samples: &[f64]) -> Vec<(f64, f64)> {
+    let padded_samples = pad_samples(samples);
+
+    fft_(&padded_samples)
+}
+
+fn inverse_fast_fourier_transform(buckets: &[(f64, f64)]) -> Vec<f64> {
+    ifft_(&buckets).iter().map(|(real, _)| real).cloned().collect::<Vec<f64>>()
+}
+
+fn pad_samples(samples: &[f64]) -> Vec<(f64, f64)> {
+    let bits = f64::log2(samples.len() as f64).ceil() as u32;
+    let padded_size = 2usize.pow(bits);
+    assert!(padded_size >= samples.len());
+    println!("Padding samples to size: {}", padded_size);
+    let mut padded_samples = samples
+        .iter()
+        .map(|sample| (sample.clone(), 0.0))
+        .chain(vec![(0.0, 0.0); padded_size - samples.len()])
+        .collect::<Vec<(f64, f64)>>();
+    assert_eq!(padded_samples.len(), padded_size);
+    padded_samples
+}
+
+// FIXME: These don't work:
+
+fn fft_(samples: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    xfft_(samples, 1.0)
+}
+fn ifft_(samples: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    xfft_(samples, -1.0)
+}
+
+fn xfft_(samples: &[(f64, f64)], sign: f64) -> Vec<(f64, f64)> {
+    if samples.len() == 1 {
+        vec![samples[0].clone()]
+    } else {
+        let (mut odds, mut evens) = (vec![], vec![]);
+        for (idx, sample) in samples.iter().enumerate() {
+            if idx % 2 == 1 {
+                odds.push(sample.clone());
+            } else {
+                evens.push(sample.clone());
+            }
+        }
+        let (odd_fft, even_fft) = (fft_(&odds), fft_(&evens));
+
+        let mut full_fft = vec![(0.0, 0.0); samples.len()];
+        for i in 0..(samples.len() / 2) {
+            // omega, i.e. i/nth root of unity:
+            let (imaginary, real) = f64::sin_cos(2.0 * std::f64::consts::PI * i as f64 / samples.len() as f64);
+            full_fft[i] = (odd_fft[i].0 + (real * odd_fft[i].0), even_fft[i].1 + (imaginary * odd_fft[i].1));
+            full_fft[i + samples.len() / 2] = (even_fft[i].0 - (real * odd_fft[i].0), even_fft[i].1 - (imaginary * odd_fft[i].1));
+        }
+        full_fft
+    }
 }
