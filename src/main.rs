@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use hound;
 use hound::WavReader;
 use image;
@@ -12,42 +12,43 @@ const SAMPLE_ON_COLOR: image::Rgb<u8> = image::Rgb([u8::MAX, u8::MAX, u8::MAX]);
 const MAX_VISUAL_AMPLITUDE: u32 = 100; // In pixels
 
 fn main() {
-    let mut reader = hound::WavReader::open("data/test_mono.wav").unwrap();
+    let mut reader = hound::WavReader::open("data/ode_to_joy.wav").unwrap();
 
     let samples: Vec<f64> = reader.samples::<i16>().map(|sample| sample.unwrap() as f64 / i16::MAX as f64).collect();
     println!("number of samples: {}", samples.len());
     println!("file spec: {:?}", reader.spec());
-    let magnitudes = dumb_fourier_transform(&samples, 5_000);
+    let buckets = dumb_fourier_transform(&samples, samples.len()-10_000);
 
 
-    let reconstructed_samples = inverse_fourier_transform(&magnitudes, samples.len());
-    println!("reconstructed samples: {:?}", &reconstructed_samples[40800..50800]);
-    let mut writer = hound::WavWriter::create("outputs/reconstructed.wav", reader.spec()).unwrap();
+    let reconstructed_samples = inverse_fourier_transform(&buckets);
+    let mut writer = hound::WavWriter::create("outputs/reconstructed_ode_to_joy.wav", reader.spec()).unwrap();
     for sample in reconstructed_samples.iter().map(|sample| (sample * i16::MAX as f64) as i16) {
         writer.write_sample(sample).unwrap();
     }
-    draw_magnitudes(magnitudes);
+    draw_magnitudes(buckets);
     writer.finalize().unwrap();
 }
 
-fn inverse_fourier_transform(magnitudes: &[(f64, f64)], sample_length: usize) -> Vec<f64> {
-    let mut reconstructed_samples = vec![0.0; sample_length];
-    for (period, (real, imaginary)) in magnitudes.iter().enumerate() {
-
-        if period % 1_000 == 0 {
-            println!("IFT: finished calculating periods up to: {}, (time = {:?})", period, std::time::SystemTime::now());
+fn inverse_fourier_transform(buckets: &[(f64, f64)]) -> Vec<f64> {
+    let mut reconstructed_samples = vec![0.0; buckets.len()];
+    for (k, (real, imaginary)) in buckets.iter().enumerate() {
+        
+        if buckets[k] == (0.0f64, 0.0f64) {
+            continue;
         }
 
-        for sample_idx in 0..reconstructed_samples.len() {
-            if period != 0 {
-                let (sin, cos) = f64::sin_cos(sample_idx as f64 * 2.0 * std::f64::consts::PI / period as f64);
-                reconstructed_samples[sample_idx] += (real * cos) + (imaginary * sin);
-            } else {
-                reconstructed_samples[sample_idx] += real;
-            }
+        if k % 1_000 == 0 {
+            println!("IFT: finished calculating buckets up to: {} / samples.len(), (time = {:?})", k, std::time::SystemTime::now());
+        }
+        
+        let frequency = k as f64 / buckets.len() as f64;
+
+        for n in 0..reconstructed_samples.len() {
+            let (sin, cos) = f64::sin_cos(n as f64 * 2.0 * std::f64::consts::PI * frequency);
+            reconstructed_samples[n] += (real * cos) + (imaginary * sin);
         }
     }
-    reconstructed_samples.iter().map(|sample| sample / sample_length as f64).collect::<_>()
+    reconstructed_samples.iter().map(|sample| sample / buckets.len() as f64).collect::<_>()
 }
 
 fn draw_magnitudes(magnitudes: Vec<(f64, f64)>) {
@@ -93,26 +94,24 @@ fn save_waveform(reader: &mut WavReader<BufReader<File>>) {
     image.save_with_format("outputs/image.png", image::ImageFormat::Png).unwrap()
 }
 
-fn dumb_fourier_transform(samples: &[f64], max_period: usize) -> Vec<(f64, f64)> {
-    let mut magnitudes = vec![(0.0, 0.0); max_period + 1];
-    for period in 0..=max_period {
+fn dumb_fourier_transform(samples: &[f64], min_k: usize) -> Vec<(f64, f64)> {
+    let mut buckets = vec![(0.0, 0.0); samples.len()];
+    for k in min_k..samples.len() {
 
-        if period % 1_000 == 0 {
-            println!("FT: finished calculating periods up to: {}, (time = {:?})", period, std::time::SystemTime::now());
+        if k % 1_000 == 0 {
+            println!("FT: finished calculating buckets up to: {} / {}, (time = {:?})", k, samples.len(), std::time::SystemTime::now());
         }
+        
+        let frequency = k as f64 / samples.len() as f64;
 
         let (mut imaginary, mut real) = (0.0f64, 0.0f64);
-        for i in 0..samples.len() {
-            let (sin, cos) = if period != 0 {
-                f64::sin_cos(i as f64 * 2.0f64 * std::f64::consts::PI / period as f64)
-            } else {
-                (0.0f64, 1.0f64)
-            };
-            imaginary += samples[i] * sin;
-            real += samples[i] * cos;
+        for n in 0..samples.len() {
+            let (sin, cos) = f64::sin_cos(n as f64 * 2.0f64 * std::f64::consts::PI * frequency);
+            imaginary += samples[n] * sin;
+            real += samples[n] * cos;
         }
-        magnitudes[period] = (real, imaginary);
+        buckets[k] = (real, imaginary);
     }
 
-    magnitudes
+    buckets
 }
