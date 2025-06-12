@@ -23,13 +23,10 @@ fn main() {
     ).collect();
     println!("number of samples: {}", samples.len());
     println!("file spec: {:?}", reader.spec());
-    let buckets = fast_fourier_transform(&pad_samples(&samples));
-
-    println!("{:?}", &buckets[buckets.len()-5000..buckets.len()]);
+    let amplitudes = fast_fourier_transform(&pad_samples(&samples));
 
 
-    let reconstructed_samples = inverse_fast_fourier_transform(&buckets);
-    println!("{:?}", &reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16).collect::<Vec<i16>>()[0..5000]);
+    let reconstructed_samples = inverse_fast_fourier_transform(&amplitudes);
     let mut writer = hound::WavWriter::create("outputs/reconstructed_ode_to_joy.wav", reader.spec()).unwrap();
     for sample in reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16) {
         writer.write_sample(sample).unwrap();
