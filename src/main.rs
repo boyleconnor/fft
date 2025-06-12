@@ -16,21 +16,21 @@ const SAMPLE_ON_COLOR: image::Rgb<u8> = image::Rgb([u8::MAX, u8::MAX, u8::MAX]);
 const MAX_VISUAL_AMPLITUDE: u32 = 100; // In pixels
 
 fn main() {
-    let mut reader = hound::WavReader::open("data/test_mono.wav").unwrap();
+    let mut reader = hound::WavReader::open("data/ode_to_joy.wav").unwrap();
 
     let samples: Vec<Complex> = reader.samples::<i16>().map(
         |sample| Complex { real: sample.unwrap() as f64 / i16::MAX as f64, imaginary: 0.0 }
     ).collect();
     println!("number of samples: {}", samples.len());
     println!("file spec: {:?}", reader.spec());
-    let buckets = dumb_fourier_transform(&samples, samples.len()-5_000);
+    let buckets = fast_fourier_transform(&pad_samples(&samples));
 
     println!("{:?}", &buckets[buckets.len()-5000..buckets.len()]);
 
 
-    let reconstructed_samples = dumb_inverse_fourier_transform(&buckets);
+    let reconstructed_samples = inverse_fast_fourier_transform(&buckets);
     println!("{:?}", &reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16).collect::<Vec<i16>>()[0..5000]);
-    let mut writer = hound::WavWriter::create("outputs/reconstructed.wav", reader.spec()).unwrap();
+    let mut writer = hound::WavWriter::create("outputs/reconstructed_ode_to_joy.wav", reader.spec()).unwrap();
     for sample in reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16) {
         writer.write_sample(sample).unwrap();
     }
@@ -126,21 +126,21 @@ fn dumb_fourier_transform(samples: &[Complex], min_k: usize) -> Vec<Complex> {
 }
 
 fn fast_fourier_transform(samples: &[Complex]) -> Vec<Complex> {
-    fft_(&samples)
+    fft_(&samples).iter().map(|amplitude| *amplitude * Complex::real(1.0 / samples.len() as f64)).collect()
 }
 
 fn inverse_fast_fourier_transform(amplitudes: &[Complex]) -> Vec<Complex> {
     ifft_(&amplitudes)
 }
 
-fn pad_samples(samples: &[f64]) -> Vec<Complex> {
+fn pad_samples(samples: &[Complex]) -> Vec<Complex> {
     let bits = f64::log2(samples.len() as f64).ceil() as u32;
     let padded_size = 2usize.pow(bits);
     assert!(padded_size >= samples.len());
     println!("Padding samples to size: {}", padded_size);
     let mut padded_samples = samples
         .iter()
-        .map(|sample| Complex::real(sample.clone()))
+        .cloned()
         .chain(vec![Complex::zero(); padded_size - samples.len()])
         .collect::<Vec<Complex>>();
     assert_eq!(padded_samples.len(), padded_size);
@@ -150,10 +150,10 @@ fn pad_samples(samples: &[f64]) -> Vec<Complex> {
 // FIXME: These don't work:
 
 fn fft_(samples: &[Complex]) -> Vec<Complex> {
-    xfft_(samples, 1.0)
+    xfft_(samples, -1.0)
 }
 fn ifft_(samples: &[Complex]) -> Vec<Complex> {
-    xfft_(samples, -1.0)
+    xfft_(samples, 1.0)
 }
 
 fn xfft_(samples: &[Complex], sign: f64) -> Vec<Complex> {
