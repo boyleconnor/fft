@@ -1,3 +1,5 @@
+use std::ops::Sub;
+
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub struct Complex {
     pub real: f64,
@@ -7,6 +9,10 @@ pub struct Complex {
 impl Complex {
     pub fn zero() -> Complex {
         Complex { real: 0.0, imaginary: 0.0 }
+    }
+    
+    pub fn real(real: f64) -> Complex {
+        Complex { real, imaginary: 0.0 }
     }
 
     /// Give the value of e^(ix)
@@ -38,6 +44,17 @@ impl std::ops::AddAssign for Complex {
     fn add_assign(&mut self, rhs: Self) {
         self.real += rhs.real;
         self.imaginary += rhs.imaginary;
+    }
+}
+
+impl Sub for Complex {
+    type Output = Complex;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Complex {
+            real: self.real - rhs.real,
+            imaginary: self.imaginary - rhs.imaginary
+        }
     }
 }
 
