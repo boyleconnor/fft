@@ -1,9 +1,12 @@
+mod complex;
+
 use std::fs::File;
 use std::io::{BufReader, Write};
 use hound;
 use hound::WavReader;
 use image;
 use std;
+use crate::complex::Complex;
 
 const IMAGE_WIDTH: u32 = 2048;
 const IMAGE_HEIGHT: u32 = 1024;
@@ -12,28 +15,33 @@ const SAMPLE_ON_COLOR: image::Rgb<u8> = image::Rgb([u8::MAX, u8::MAX, u8::MAX]);
 const MAX_VISUAL_AMPLITUDE: u32 = 100; // In pixels
 
 fn main() {
-    let mut reader = hound::WavReader::open("data/ode_to_joy.wav").unwrap();
+    let mut reader = hound::WavReader::open("data/test_mono.wav").unwrap();
 
-    let samples: Vec<f64> = reader.samples::<i16>().map(|sample| sample.unwrap() as f64 / i16::MAX as f64).collect();
+    let samples: Vec<Complex> = reader.samples::<i16>().map(
+        |sample| Complex { real: sample.unwrap() as f64 / i16::MAX as f64, imaginary: 0.0 }
+    ).collect();
     println!("number of samples: {}", samples.len());
     println!("file spec: {:?}", reader.spec());
-    let buckets = dumb_fourier_transform(&samples, samples.len()-10_000);
+    let buckets = dumb_fourier_transform(&samples, samples.len()-5_000);
+    
+    println!("{:?}", &buckets[buckets.len()-5000..buckets.len()]);
 
 
-    let reconstructed_samples = inverse_fourier_transform(&buckets);
-    let mut writer = hound::WavWriter::create("outputs/reconstructed_ode_to_joy.wav", reader.spec()).unwrap();
-    for sample in reconstructed_samples.iter().map(|sample| (sample * i16::MAX as f64) as i16) {
+    let reconstructed_samples = dumb_inverse_fourier_transform(&buckets);
+    println!("{:?}", &reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16).collect::<Vec<i16>>()[0..5000]);
+    let mut writer = hound::WavWriter::create("outputs/reconstructed.wav", reader.spec()).unwrap();
+    for sample in reconstructed_samples.iter().map(|sample| (sample.real * i16::MAX as f64) as i16) {
         writer.write_sample(sample).unwrap();
     }
-    draw_magnitudes(buckets);
+    // draw_magnitudes(buckets);
     writer.finalize().unwrap();
 }
 
-fn inverse_fourier_transform(buckets: &[(f64, f64)]) -> Vec<f64> {
-    let mut reconstructed_samples = vec![0.0; buckets.len()];
-    for (k, (real, imaginary)) in buckets.iter().enumerate() {
+fn dumb_inverse_fourier_transform(buckets: &[Complex]) -> Vec<Complex> {
+    let mut reconstructed_samples = vec![Complex::zero(); buckets.len()];
+    for (k, bucket_value) in buckets.iter().enumerate() {
         
-        if buckets[k] == (0.0f64, 0.0f64) {
+        if buckets[k] == Complex::zero() {
             continue;
         }
 
@@ -41,14 +49,15 @@ fn inverse_fourier_transform(buckets: &[(f64, f64)]) -> Vec<f64> {
             println!("IFT: finished calculating buckets up to: {} / {}, (time = {:?})", k, buckets.len(), std::time::SystemTime::now());
         }
         
-        let frequency = k as f64 / buckets.len() as f64;
+        let frequency = k as f64 / reconstructed_samples.len() as f64;
 
         for n in 0..reconstructed_samples.len() {
-            let (sin, cos) = f64::sin_cos(n as f64 * 2.0 * std::f64::consts::PI * frequency);
-            reconstructed_samples[n] += (real * cos) + (imaginary * sin);
+            // Complex arc distance, in radians
+            let arc = 2.0 * std::f64::consts::PI * frequency * n as f64;
+            reconstructed_samples[n] += Complex::unity_root(arc) * *bucket_value;
         }
     }
-    reconstructed_samples.iter().map(|sample| sample / buckets.len() as f64).collect::<_>()
+    reconstructed_samples
 }
 
 fn draw_magnitudes(magnitudes: Vec<(f64, f64)>) {
@@ -94,8 +103,8 @@ fn save_waveform(reader: &mut WavReader<BufReader<File>>) {
     image.save_with_format("outputs/image.png", image::ImageFormat::Png).unwrap()
 }
 
-fn dumb_fourier_transform(samples: &[f64], min_k: usize) -> Vec<(f64, f64)> {
-    let mut buckets = vec![(0.0, 0.0); samples.len()];
+fn dumb_fourier_transform(samples: &[Complex], min_k: usize) -> Vec<Complex> {
+    let mut buckets = vec![Complex::zero(); samples.len()];
     for k in min_k..samples.len() {
 
         if k % 1_000 == 0 {
@@ -104,14 +113,12 @@ fn dumb_fourier_transform(samples: &[f64], min_k: usize) -> Vec<(f64, f64)> {
         
         let frequency = k as f64 / samples.len() as f64;
 
-        let (mut imaginary, mut real) = (0.0f64, 0.0f64);
         for n in 0..samples.len() {
-            let (sin, cos) = f64::sin_cos(n as f64 * 2.0f64 * std::f64::consts::PI * frequency);
-            // Assume imaginary component is 0:
-            imaginary += samples[n] * sin;
-            real += samples[n] * cos;
+            // Complex arc distance, in radians
+            let arc = 2.0 * std::f64::consts::PI * frequency * n as f64;
+            buckets[k] += Complex::unity_root(-arc) * samples[n];
         }
-        buckets[k] = (real, imaginary);
+        buckets[k] *= Complex { real: 1.0 / samples.len() as f64, imaginary: 0.0 };
     }
 
     buckets
