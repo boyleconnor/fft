@@ -21,6 +21,11 @@ impl Complex {
         Complex { real: cos, imaginary: sin }
     }
 
+    /// Give the value of e^(2πix/N), i.e. an x/n rotation in the complex plane, starting at 1
+    pub fn w(x: usize, n: usize, sign: f64) -> Complex {
+        Complex::unity_root(sign * 2.0 * std::f64::consts::PI * x as f64 / n as f64)
+    }
+
     pub fn euclidean_distance(&self, other: Complex) -> f64 {
         (
             (self.imaginary - other.imaginary).powf(2.0) +

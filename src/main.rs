@@ -6,6 +6,7 @@ use hound;
 use hound::WavReader;
 use image;
 use std;
+use std::arch::x86_64::_mm_test_all_ones;
 use std::ops::Sub;
 use crate::complex::Complex;
 
@@ -23,7 +24,7 @@ fn main() {
     ).collect();
     println!("number of samples: {}", samples.len());
     println!("file spec: {:?}", reader.spec());
-    let amplitudes = fast_fourier_transform(&pad_samples(&samples));
+    let amplitudes = fast_fourier_transform(&samples);
 
 
     let reconstructed_samples = inverse_fast_fourier_transform(&amplitudes);
@@ -43,9 +44,9 @@ fn dumb_inverse_fourier_transform(buckets: &[Complex]) -> Vec<Complex> {
             continue;
         }
 
-        if k % 1_000 == 0 {
-            println!("IFT: finished calculating buckets up to: {} / {}, (time = {:?})", k, buckets.len(), std::time::SystemTime::now());
-        }
+        // if k % 1_000 == 0 {
+        //     println!("IFT: finished calculating buckets up to: {} / {}, (time = {:?})", k, buckets.len(), std::time::SystemTime::now());
+        // }
         
         let frequency = k as f64 / reconstructed_samples.len() as f64;
 
@@ -105,9 +106,9 @@ fn dumb_fourier_transform(samples: &[Complex], min_k: usize) -> Vec<Complex> {
     let mut buckets = vec![Complex::zero(); samples.len()];
     for k in min_k..samples.len() {
 
-        if k % 1_000 == 0 {
-            println!("FT: finished calculating buckets up to: {} / {}, (time = {:?})", k, samples.len(), std::time::SystemTime::now());
-        }
+        // if k % 1_000 == 0 {
+        //     println!("FT: finished calculating buckets up to: {} / {}, (time = {:?})", k, samples.len(), std::time::SystemTime::now());
+        // }
         
         let frequency = k as f64 / samples.len() as f64;
 
@@ -151,24 +152,40 @@ fn ifft_(samples: &[Complex]) -> Vec<Complex> {
     xfft_(samples, 1.0)
 }
 
+const PRIMES: [usize; 25] = [
+    02, 03, 05, 07, 11,
+    13, 17, 19, 23, 29,
+    31, 37, 41, 43, 47,
+    53, 59, 61, 67, 71,
+    73, 79, 83, 89, 97
+];
+
 fn xfft_(samples: &[Complex], sign: f64) -> Vec<Complex> {
+    let n = samples.len();
     if samples.len() == 1 {
         vec![samples[0].clone()]
     } else {
-        let (mut odds, mut evens) = (vec![], vec![]);
-        for (idx, sample) in samples.iter().enumerate() {
-            if idx % 2 == 1 { odds.push(sample.clone()); } else { evens.push(sample.clone()); }
+        let candidate_r_2 = PRIMES.iter().find(|r| (**r < n) && n % *r == 0);
+        let r_2 = candidate_r_2.cloned().unwrap_or(n);
+        let r_1 = n / r_2;
+        let mut x_prime = vec![];
+        // k_0 is a modulus class
+        for k_0 in 0..r_2 {
+            let samples_in_class = (0..r_1).map(|k_1| samples[k_1 * r_2 + k_0]).collect::<Vec<_>>();
+            x_prime.push(xfft_(&samples_in_class, sign));
         }
-        let (odd_fft, even_fft) = (xfft_(&odds, sign), xfft_(&evens, sign));
 
-
-        let mut full_fft = vec![Complex::zero(); samples.len()];
-        for i in 0..(samples.len() / 2) {
-            // omega, i.e. i/nth root of unity:
-            let omega_i = Complex::unity_root(sign * 2.0 * std::f64::consts::PI * i as f64 / samples.len() as f64);
-            full_fft[i] = even_fft[i] + (omega_i * odd_fft[i]);
-            full_fft[i + samples.len() / 2] = even_fft[i] - (omega_i * odd_fft[i]);
+        let mut x = vec![Complex::zero(); n];
+        for j_0 in 0..r_1 {
+            for j_1 in 0..r_2 {
+                let x_idx = (j_1 * r_1) + j_0;
+                for k_0 in 0..r_2 {
+                    // FIXME: Should this `n` be `r_2` instead?
+                    x[x_idx] += x_prime[k_0][j_0] * Complex::w((j_1 * r_1 + j_0) * k_0, n, sign)
+                }
+            }
         }
-        full_fft
+
+        x
     }
 }
