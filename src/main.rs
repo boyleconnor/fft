@@ -6,7 +6,6 @@ use hound;
 use hound::WavReader;
 use image;
 use std;
-use std::arch::x86_64::_mm_test_all_ones;
 use std::ops::Sub;
 use crate::complex::Complex;
 
