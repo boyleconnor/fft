@@ -81,7 +81,6 @@ fn xfft_(samples: &[Complex], sign: f64) -> Vec<Complex> {
             for j_1 in 0..r_2 {
                 let x_idx = (j_1 * r_1) + j_0;
                 for k_0 in 0..r_2 {
-                    // FIXME: Should this `n` be `r_2` instead?
                     x[x_idx] += x_prime[k_0][j_0] * Complex::w((j_1 * r_1 + j_0) * k_0, n, sign)
                 }
             }
