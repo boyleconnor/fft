@@ -15,15 +15,15 @@ impl Complex {
         Complex { real, imaginary: 0.0 }
     }
 
-    /// Give the value of e^(ix)
-    pub fn unity_root(x: f64) -> Complex {
-        let (sin, cos) = f64::sin_cos(x);
+    /// Give the value of e^(iθ) = cos(θ) + i sin(θ)
+    pub fn cis(theta: f64) -> Complex {
+        let (sin, cos) = f64::sin_cos(theta);
         Complex { real: cos, imaginary: sin }
     }
 
     /// Give the value of e^(2πix/N), i.e. an x/n rotation in the complex plane, starting at 1
     pub fn w(x: usize, n: usize, sign: f64) -> Complex {
-        Complex::unity_root(sign * 2.0 * std::f64::consts::PI * x as f64 / n as f64)
+        Complex::cis(sign * std::f64::consts::TAU * x as f64 / n as f64)
     }
 
     pub fn euclidean_distance(&self, other: Complex) -> f64 {
@@ -93,8 +93,8 @@ fn test_complex_mult() {
         Complex { real: 0.0, imaginary: -1.0 }
     );
 
-    assert!(Complex::unity_root(std::f64::consts::PI / 2.0).euclidean_distance(i) < 0.001);
-    assert!(Complex::unity_root(std::f64::consts::PI).euclidean_distance(minus_one) < 0.001);
-    assert!(Complex::unity_root(std::f64::consts::PI * 2.0).euclidean_distance(one) < 0.001);
-    assert!(Complex::unity_root(std::f64::consts::PI * 3.0 / 2.0).euclidean_distance(minus_i) < 0.001);
+    assert!(Complex::cis(std::f64::consts::PI / 2.0).euclidean_distance(i) < 0.001);
+    assert!(Complex::cis(std::f64::consts::PI).euclidean_distance(minus_one) < 0.001);
+    assert!(Complex::cis(std::f64::consts::PI * 2.0).euclidean_distance(one) < 0.001);
+    assert!(Complex::cis(std::f64::consts::PI * 3.0 / 2.0).euclidean_distance(minus_i) < 0.001);
 }

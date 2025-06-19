@@ -52,7 +52,7 @@ fn dumb_inverse_fourier_transform(buckets: &[Complex]) -> Vec<Complex> {
         for n in 0..reconstructed_samples.len() {
             // Complex arc distance, in radians
             let arc = 2.0 * std::f64::consts::PI * frequency * n as f64;
-            reconstructed_samples[n] += Complex::unity_root(arc) * *bucket_value;
+            reconstructed_samples[n] += Complex::cis(arc) * *bucket_value;
         }
     }
     reconstructed_samples
@@ -104,17 +104,13 @@ fn save_waveform(reader: &mut WavReader<BufReader<File>>) {
 fn dumb_fourier_transform(samples: &[Complex], min_k: usize) -> Vec<Complex> {
     let mut buckets = vec![Complex::zero(); samples.len()];
     for k in min_k..samples.len() {
-
-        // if k % 1_000 == 0 {
-        //     println!("FT: finished calculating buckets up to: {} / {}, (time = {:?})", k, samples.len(), std::time::SystemTime::now());
-        // }
         
         let frequency = k as f64 / samples.len() as f64;
 
         for n in 0..samples.len() {
             // Complex arc distance, in radians
             let arc = 2.0 * std::f64::consts::PI * frequency * n as f64;
-            buckets[k] += Complex::unity_root(-arc) * samples[n];
+            buckets[k] += Complex::cis(-arc) * samples[n];
         }
         buckets[k] *= Complex { real: 1.0 / samples.len() as f64, imaginary: 0.0 };
     }
