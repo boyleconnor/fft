@@ -26,6 +26,7 @@ impl Complex {
         Complex::cis(sign * std::f64::consts::TAU * x as f64 / n as f64)
     }
 
+    #[allow(dead_code)]
     pub fn euclidean_distance(&self, other: Complex) -> f64 {
         (
             (self.imaginary - other.imaginary).powf(2.0) +
