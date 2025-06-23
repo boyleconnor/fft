@@ -37,19 +37,3 @@ fn main() {
     // draw_magnitudes(buckets);
     writer.finalize().unwrap();
 }
-
-#[allow(dead_code)]
-fn pad_samples(samples: &[Complex]) -> Vec<Complex> {
-    let bits = f64::log2(samples.len() as f64).ceil() as u32;
-    let padded_size = 2usize.pow(bits);
-    assert!(padded_size >= samples.len());
-    println!("Padding samples to size: {} = 2^{}", padded_size, bits);
-    let padded_samples = samples
-        .iter()
-        .cloned()
-        .chain(vec![Complex::zero(); padded_size - samples.len()])
-        .collect::<Vec<Complex>>();
-    assert_eq!(padded_samples.len(), padded_size);
-    padded_samples
-}
-
