@@ -1,9 +1,20 @@
+use std::fmt::{Debug, Formatter};
 use std::ops::Sub;
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Copy)]
 pub struct Complex {
     pub real: f64,
     pub imaginary: f64
+}
+
+impl Debug for Complex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.imaginary < 0.0 {
+            write!(f, "{}{}i", self.real, self.imaginary)
+        } else {
+            write!(f, "{}+{}i", self.real, self.imaginary)
+        }
+    }
 }
 
 impl Complex {
