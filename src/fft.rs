@@ -33,20 +33,54 @@ fn cooley_tukey(x: &[Complex], sign: f64) -> Vec<Complex> {
         vec![x[0].clone()]
     } else {
         let candidate_r_2 = PRIMES.iter().find(|r| (**r < n) && n % *r == 0);
-        let r_2 = candidate_r_2.cloned().unwrap_or(n);
-        let r_1 = n / r_2;
+        if let Some(&r_2) = candidate_r_2 {
+            let r_1 = n / r_2;
+            let mut x_prime = vec![];
+            // k_0 is a modulus class
+            for k_0 in 0..r_2 {
+                let elements_in_class = (0..r_1).map(|k_1| x[k_1 * r_2 + k_0]).collect::<Vec<_>>();
+                x_prime.push(cooley_tukey(&elements_in_class, sign));
+            }
+
+            let mut y = vec![Complex::zero(); n];
+            for j_0 in 0..r_1 {
+                for j_1 in 0..r_2 {
+                    let x_idx = (j_1 * r_1) + j_0;
+                    for k_0 in 0..r_2 {
+                        y[x_idx] += x_prime[k_0][j_0] * Complex::w((j_1 * r_1 + j_0) * k_0, n, sign)
+                    }
+                }
+            }
+
+            y
+        } else {
+            bluestein(x, sign)
+        }
+    }
+}
+
+/// Perform Cooley-Tukey algorithm on `x`, a sequence of complex numbers. ONLY works for `x` where
+/// `x.len()` is a power of 2 (incl. `1`). `sign` indicates the sign  of the exponent inside the
+/// integrand; it should be `-1.0` for the Fourier transform, and `1.0` for the inverse Fourier
+/// transform.
+fn cooley_tukey2(x: &[Complex], sign: f64) -> Vec<Complex> {
+    let n = x.len();
+    if n == 1 {
+        vec![x[0].clone()]
+    } else {
+        debug_assert!(n % 2 == 0);
+        let r_1 = n / 2;
         let mut x_prime = vec![];
-        // k_0 is a modulus class
-        for k_0 in 0..r_2 {
-            let elements_in_class = (0..r_1).map(|k_1| x[k_1 * r_2 + k_0]).collect::<Vec<_>>();
-            x_prime.push(cooley_tukey(&elements_in_class, sign));
+        for k_0 in 0..2 {
+            let elements_in_class = (0..r_1).map(|k_1| x[k_1 * 2 + k_0]).collect::<Vec<_>>();
+            x_prime.push(cooley_tukey2(&elements_in_class, sign));
         }
 
         let mut y = vec![Complex::zero(); n];
         for j_0 in 0..r_1 {
-            for j_1 in 0..r_2 {
+            for j_1 in 0..2 {
                 let x_idx = (j_1 * r_1) + j_0;
-                for k_0 in 0..r_2 {
+                for k_0 in 0..2 {
                     y[x_idx] += x_prime[k_0][j_0] * Complex::w((j_1 * r_1 + j_0) * k_0, n, sign)
                 }
             }
@@ -84,13 +118,12 @@ fn fft_convolve(x: &[Complex], y: &[Complex]) -> Vec<Complex> {
     let (x_, y_) = (pad_to_size(x, output_size), pad_to_size(y, output_size));
     // For Cooley-Tukey speedup, pad to next power of 2:
     let (x_, y_) = (pad_to_power_of_2(&x_), pad_to_power_of_2(&y_));
-    assert!(x_.len() % 2 == 0);
-    assert!(y_.len() % 2 == 0);
+
     // Note: it is necessary that (forward) FFT does not normalize the output, but iFFT does;
     // otherwise the output will be double-normalized
-    let (f_x, f_y) = (fast_fourier_transform(&x_), fast_fourier_transform(&y_));
+    let (f_x, f_y) = (cooley_tukey2(&x_, -1.0), cooley_tukey2(&y_, -1.0));
     let f_z: Vec<Complex> = f_x.iter().zip(f_y).map(|(a, b)| *a * b).collect();
-    let mut output = inverse_fast_fourier_transform(&f_z);
+    let mut output: Vec<Complex> = cooley_tukey2(&f_z, 1.0).iter().map(|amplitude| *amplitude * Complex::real(1.0 / f_z.len() as f64)).collect();
     output.truncate(output_size);
     output
 }
