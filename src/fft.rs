@@ -48,23 +48,16 @@ fn frankenstein_fft(x: &[Complex], sign: f64) -> Vec<Complex> {
 fn get_f_w_q(n: usize, sign: f64) -> Vec<Complex> {
     let chirp_range = (-(n as isize) + 1)..(n as isize);
     let w_q: Vec<Complex> = chirp_range.map(|i| Complex::cis(-sign * std::f64::consts::PI * (i as f64).powf(2.0) / n as f64)).collect();
-    let padded_size = 2 * n - 1;
-    let padded_samples = w_q
+    let bits = f64::log2(w_q.len() as f64).ceil() as u32;
+    let padded_size = 2usize.pow(bits);
+    assert!(padded_size >= w_q.len());
+    // println!("Padding samples to size: {} = 2^{}", padded_size, bits);
+    let w_q_padded = w_q
         .iter()
         .cloned()
         .chain(vec![Complex::zero(); padded_size - w_q.len()])
         .collect::<Vec<Complex>>();
-    assert_eq!(padded_samples.len(), padded_size);
-    let bits = f64::log2(padded_samples.len() as f64).ceil() as u32;
-    let padded_size1 = 2usize.pow(bits);
-    assert!(padded_size1 >= padded_samples.len());
-    // println!("Padding samples to size: {} = 2^{}", padded_size, bits);
-    let w_q_padded = padded_samples
-        .iter()
-        .cloned()
-        .chain(vec![Complex::zero(); padded_size1 - padded_samples.len()])
-        .collect::<Vec<Complex>>();
-    assert_eq!(w_q_padded.len(), padded_size1);
+    assert_eq!(w_q_padded.len(), padded_size);
     cooley_tukey2(&w_q_padded, -1.0)
 }
 
