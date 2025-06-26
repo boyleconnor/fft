@@ -41,8 +41,8 @@ fn get_prime_factors(n: usize) -> (usize, Vec<usize>) {
 /// `1.0` for the inverse Fourier transform.
 fn frankenstein_fft(x: &[Complex], sign: f64) -> Vec<Complex> {
     let (remaining_factor, prime_factors) = get_prime_factors(x.len());
-    let w_q_f = get_f_w_q(remaining_factor, sign);
-    frankenstein_fft_(x, &prime_factors, &w_q_f, sign)
+    let f_w_q = get_f_w_q(remaining_factor, sign);
+    frankenstein_fft_(x, &prime_factors, &f_w_q, sign)
 }
 
 fn get_f_w_q(n: usize, sign: f64) -> Vec<Complex> {
