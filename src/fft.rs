@@ -75,9 +75,15 @@ fn frankenstein_fft_(x: &[Complex], prime_factors: &[usize], w_q_f: &[Complex], 
     } else if prime_factors.len() > 0 {
         let r_2 = prime_factors[0].clone();
         let r_1 = n / r_2;
-        let x_prime = (0..r_2).map(|k_0| {
-            frankenstein_fft_(&(0..r_1).map(|k_1| x[k_1 * r_2 + k_0]).collect::<Vec<_>>(), &prime_factors[1..], w_q_f, sign)
-        }).collect::<Vec<_>>();
+        let (first_half, second_half) = rayon::join(
+            || (0..r_2/2).map(|k_0| {
+                frankenstein_fft_(&(0..r_1).map(|k_1| x[k_1 * r_2 + k_0]).collect::<Vec<_>>(), &prime_factors[1..], w_q_f, sign)
+            }).collect::<Vec<_>>(),
+            || (r_2/2..r_2).map(|k_0| {
+                frankenstein_fft_(&(0..r_1).map(|k_1| x[k_1 * r_2 + k_0]).collect::<Vec<_>>(), &prime_factors[1..], w_q_f, sign)
+            }).collect::<Vec<_>>()
+        );
+        let x_prime = first_half.iter().chain(second_half.iter()).collect::<Vec<_>>();
 
         let mut y = vec![Complex::zero(); n];
         for j_0 in 0..r_1 {
